@@ -1,0 +1,34 @@
+name: Test Case Quality Gate
+
+on:
+  pull_request:
+    paths:
+      - 'test-cases/**'
+      - '.testcasesync.json'
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Score test case quality
+        env:
+          AZURE_DEVOPS_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+        run: |
+          npx tsx src/index.ts quality --threshold 60 --format json > quality.json
+          LOW=$(jq 'length' quality.json)
+          echo "Cases below threshold: $LOW"
+          if [ "$LOW" -gt 0 ]; then
+            jq -r '.[] | "  TC-\(.id) \(.score): \(.title)"' quality.json
+          fi
+
+      - name: Detect duplicate test cases
+        env:
+          AZURE_DEVOPS_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+        run: npx tsx src/index.ts dedupe --threshold 0.8 --format json

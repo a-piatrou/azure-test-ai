@@ -1,0 +1,49 @@
+name: Test Case Sync
+
+on:
+  schedule:
+    - cron: '0 5 * * *' # daily at 05:00 UTC
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'Force full resync'
+        required: false
+        default: 'false'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Sync from Azure DevOps
+        env:
+          AZURE_DEVOPS_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+        run: |
+          npx tsx src/index.ts sync \
+            ${{ github.event.inputs.full == 'true' && '--full' || '' }} \
+            --format json > sync-report.json
+          cat sync-report.json
+
+      - name: Open PR if there are changes
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/test-case-sync
+          title: 'chore(test-sync): refresh test cases'
+          body-path: sync-report.json
+          add-paths: |
+            test-cases/**
+          commit-message: 'chore(test-sync): refresh test cases'
