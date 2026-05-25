@@ -1,0 +1,31 @@
+trigger: none
+schedules:
+  - cron: '0 5 * * *'
+    displayName: Daily test case sync
+    branches:
+      include: [main]
+    always: true
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - group: test-sync-secrets # must define AZURE_DEVOPS_PAT
+
+steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '20.x'
+
+  - script: npm ci
+    displayName: Install deps
+
+  - script: |
+      npx tsx src/index.ts sync --format json > $(Build.ArtifactStagingDirectory)/sync-report.json
+    env:
+      AZURE_DEVOPS_PAT: $(AZURE_DEVOPS_PAT)
+    displayName: Sync test cases
+
+  - publish: $(Build.ArtifactStagingDirectory)
+    artifact: sync-reports
+    displayName: Publish sync report
